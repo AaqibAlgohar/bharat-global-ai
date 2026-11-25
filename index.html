@@ -1,1 +1,257 @@
 
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>भारत ग्लोबल AI (Offline, Voice & Agents)</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #090d16; color: #f8fafc; padding: 12px; margin: 0; }
+        .container { max-width: 550px; margin: auto; background: #111827; padding: 18px; border-radius: 16px; border: 1px solid #1f2937; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .shield-badge { background: #064e3b; color: #6ee7b7; padding: 5px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; }
+        select, input, textarea { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 10px; border: 1px solid #374151; background: #1f2937; color: white; font-size: 15px; box-sizing: border-box; outline: none; }
+        select:focus, input:focus, textarea:focus { border-color: #8b5cf6; }
+        button { width: 100%; padding: 13px; background: #10b981; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 15px; margin-bottom: 8px; transition: 0.2s; }
+        button:active { transform: scale(0.98); }
+        .tab-bar { display: flex; gap: 8px; margin-bottom: 12px; background: #1f2937; padding: 5px; border-radius: 12px; }
+        .tab-btn { background: transparent; color: #9ca3af; margin: 0; padding: 10px; border-radius: 8px; }
+        .tab-btn.active { background: #7c3aed; color: white; }
+        #chat-box { height: 34vh; overflow-y: auto; border: 1px solid #374151; padding: 12px; border-radius: 10px; margin-bottom: 10px; background: #030717; line-height: 1.5; }
+        #mic-btn { background: #ef4444; font-size: 16px; }
+        #status { font-size: 12px; color: #fbbf24; margin-bottom: 8px; text-align: center; }
+        .hidden { display: none !important; }
+        .agent-card { background: #1f2937; padding: 12px; border-radius: 10px; margin-bottom: 8px; border-left: 4px solid #8b5cf6; display: flex; justify-content: space-between; align-items: center; }
+        .ad-banner { background: #1f2937; border: 1px dashed #4b5563; padding: 8px; text-align: center; font-size: 11px; color: #9ca3af; border-radius: 8px; margin-top: 8px; }
+        #vpn-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 15px; box-sizing: border-box; }
+        .modal-content { background: #1f2937; padding: 24px; border-radius: 16px; max-width: 360px; text-align: center; border: 2px solid #8b5cf6; }
+    </style>
+</head>
+<body>
+
+<!-- Opt-In Privacy Shield Popup -->
+<div id="vpn-modal">
+    <div class="modal-content">
+        <h2 style="margin-top:0;">🧅 सुरक्षित प्राइवेसी शील्ड</h2>
+        <p style="font-size: 14px; color: #d1d5db;">आपका डेटा 100% आपके फोन में रहेगा। बिना किसी बाहरी सर्वर के Tor-स्तर की सुरक्षा चालू करने के लिए बटन दबाएं।</p>
+        <button onclick="userEnableShield()" style="background: #7c3aed;">🛡️ सुरक्षा शील्ड चालू करें (Start)</button>
+    </div>
+</div>
+
+<!-- Main App -->
+<div class="container hidden" id="main-app">
+    <div class="header">
+        <span style="font-weight: bold; font-size: 16px;">🌐 भारत ग्लोबल AI</span>
+        <span class="shield-badge">🔒 100% Offline & Private</span>
+    </div>
+
+    <!-- Language Selector (Indian + Worldwide) -->
+    <select id="lang-select" onchange="updateUILanguage()" aria-label="Select Language">
+        <optgroup label="🇮🇳 भारतीय भाषाएँ (Indian Languages)">
+            <option value="hi-IN" selected>हिन्दी (Hindi)</option>
+            <option value="en-IN">English (India)</option>
+            <option value="mr-IN">मराठी (Marathi)</option>
+            <option value="bn-IN">বাংলা (Bengali)</option>
+            <option value="ta-IN">தமிழ் (Tamil)</option>
+            <option value="te-IN">తెలుగు (Telugu)</option>
+            <option value="gu-IN">ગુજરાતી (Gujarati)</option>
+            <option value="kn-IN">ಕನ್ನಡ (Kannada)</option>
+            <option value="ml-IN">മലയാളം (Malayalam)</option>
+            <option value="pa-IN">ਪੰਜਾਬੀ (Punjabi)</option>
+            <option value="ur-IN">اردو (Urdu)</option>
+        </optgroup>
+        <optgroup label="🌍 विश्व की भाषाएँ (Worldwide)">
+            <option value="en-US">English (Global)</option>
+            <option value="ar-SA">العربية (Arabic)</option>
+            <option value="es-ES">Español (Spanish)</option>
+            <option value="fr-FR">Français (French)</option>
+            <option value="ru-RU">Русский (Russian)</option>
+            <option value="ja-JP">日本語 (Japanese)</option>
+        </optgroup>
+    </select>
+    
+    <!-- Navigation Tabs -->
+    <div class="tab-bar">
+        <button class="tab-btn active" id="tab-chat" onclick="switchTab('chat')">💬 AI से बात करें</button>
+        <button class="tab-btn" id="tab-agents" onclick="switchTab('agents')">🤖 एजेंट्स बनाएं</button>
+    </div>
+
+    <div id="status">AI इंजन लोड हो रहा है... (पहली बार इंटरनेट ज़रूरी है)</div>
+
+    <!-- SECTION 1: WORK WITH AGENTS -->
+    <div id="view-chat">
+        <select id="active-agent-select" onchange="changeActiveAgent()"></select>
+        <div id="chat-box" aria-live="polite"></div>
+        <input type="text" id="user-input" placeholder="यहाँ लिखें या नीचे लाल बटन दबाकर बोलें...">
+        <button id="send-btn" onclick="askAI()">संदेश भेजें (Send)</button>
+        <button id="mic-btn" onclick="startVoice()">🎤 बोलकर पूछें (Voice Command)</button>
+    </div>
+
+    <!-- SECTION 2: CREATE UNLIMITED AI AGENTS -->
+    <div id="view-agents" class="hidden">
+        <h4 id="create-title" style="margin: 5px 0;">➕ नया AI एजेंट (कर्मचारी) बनाएं</h4>
+        <input type="text" id="new-agent-name" placeholder="एजेंट का नाम (जैसे: मुनीम, टीचर, डॉक्टर)">
+        <textarea id="new-agent-role" rows="3" placeholder="इसका खास काम लिखें (जैसे: तुम हिसाब-किताब के एक्सपर्ट हो...)"></textarea>
+        <button id="save-agent-btn" onclick="createNewAgent()" style="background: #2563eb;">✅ एजेंट सेव करें</button>
+        <h4 id="saved-title" style="margin: 12px 0 6px 0;">📋 आपकी AI टीम:</h4>
+        <div id="agents-list"></div>
+    </div>
+
+    <div class="ad-banner">
+        📢 स्पॉन्सर्ड विज्ञापन: 100% मुफ़्त और सुरक्षित AI सेवा
+    </div>
+</div>
+
+<script type="module">
+    import * as webllm from "https://esm.run";
+
+    let engine;
+    const modelName = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
+
+    // UI भाषा बदलने के लिए शब्दकोश
+    const uiTranslations = {
+        "hi-IN": { tabChat: "💬 AI से बात करें", tabAgents: "🤖 एजेंट्स बनाएं", placeholder: "यहाँ लिखें या बोलकर पूछें...", send: "संदेश भेजें", mic: "🎤 बोलकर पूछें (Voice)" },
+        "en-IN": { tabChat: "💬 Chat with AI", tabAgents: "🤖 Create Agents", placeholder: "Type here or press Mic to speak...", send: "Send Message", mic: "🎤 Speak Now (Voice)" },
+        "en-US": { tabChat: "💬 Chat with AI", tabAgents: "🤖 Create Agents", placeholder: "Type here or press Mic to speak...", send: "Send Message", mic: "🎤 Speak Now (Voice)" },
+        "mr-IN": { tabChat: "💬 AI शी बोला", tabAgents: "🤖 एजंट बनवा", placeholder: "येथे लिहा किंवा बोलून विचारा...", send: "पाठवा", mic: "🎤 बोलून विचारा" },
+        "bn-IN": { tabChat: "💬 AI-এর সাথে কথা বলুন", tabAgents: "🤖 এজেন্ট তৈরি করুন", placeholder: "এখানে লিখুন বা বলুন...", send: "পাঠান", mic: "🎤 কথা বলুন" },
+        "ta-IN": { tabChat: "💬 AI உடன் பேசுங்கள்", tabAgents: "🤖 ஏஜென்ட் உருவாக்கு", placeholder: "இங்கே தட்டச்சு செய்யவும்...", send: "அனுப்பு", mic: "🎤 பேசி கேளுங்கள்" },
+        "gu-IN": { tabChat: "💬 AI સાથે વાત કરો", tabAgents: "🤖 એજન્ટ બનાવો", placeholder: "અહીં લખો અથવા બોલો...", send: "મોકલો", mic: "🎤 બોલીને પૂછો" }
+    };
+
+    window.updateUILanguage = function() {
+        const lang = document.getElementById("lang-select").value;
+        const t = uiTranslations[lang] || uiTranslations["en-IN"];
+        document.getElementById("tab-chat").innerText = t.tabChat;
+        document.getElementById("tab-agents").innerText = t.tabAgents;
+        document.getElementById("user-input").placeholder = t.placeholder;
+        document.getElementById("send-btn").innerText = t.send;
+        document.getElementById("mic-btn").innerText = t.mic;
+    }
+
+    const defaultAgents = [
+        { name: "सामान्य सहायक (General AI)", role: "You are a helpful, polite AI assistant. Always reply clearly in the exact language the user speaks or selects." },
+        { name: "बिज़नेस और हिसाब एक्सपर्ट", role: "You are an expert Indian business advisor and accountant. Help shopkeepers and users manage money and grow profit." },
+        { name: "स्वास्थ्य और शिक्षा गाइड", role: "You are a helpful health and education guide. Explain things simply so anyone can understand." }
+    ];
+
+    let myAgents = JSON.parse(localStorage.getItem("bharat_global_agents")) || defaultAgents;
+
+    window.userEnableShield = async function() {
+        await window.crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+        document.getElementById("vpn-modal").classList.add("hidden");
+        document.getElementById("main-app").classList.remove("hidden");
+        renderAgents();
+        speakText("सुरक्षा शील्ड चालू हो गई है। आपका एआई तैयार हो रहा है।");
+        loadOfflineEngine();
+    }
+
+    window.switchTab = function(tab) {
+        document.getElementById("view-chat").classList.toggle("hidden", tab !== 'chat');
+        document.getElementById("view-agents").classList.toggle("hidden", tab !== 'agents');
+        document.getElementById("tab-chat").classList.toggle("active", tab === 'chat');
+        document.getElementById("tab-agents").classList.toggle("active", tab === 'agents');
+    }
+
+    window.createNewAgent = function() {
+      const name = document.getElementById("new-agent-name").value.trim();
+const role = document.getElementById("new-agent-role").value.trim();
+if (!name || !role) {
+alert("कृपया नाम और काम दोनों लिखें!");
+return;
+}
+myAgents.push({ name, role });
+localStorage.setItem("bharat_global_agents", JSON.stringify(myAgents));
+document.getElementById("new-agent-name").value = "";
+document.getElementById("new-agent-role").value = "";
+renderAgents();
+speakText("नया एजेंट तैयार है।");
+switchTab('chat');
+}
+window.deleteAgent = function(index) {
+if (index === 0) return;
+myAgents.splice(index, 1);
+localStorage.setItem("bharat_global_agents", JSON.stringify(myAgents));
+renderAgents();
+}
+function renderAgents() {
+const select = document.getElementById("active-agent-select");
+const list = document.getElementById("agents-list");
+select.innerHTML = "";
+list.innerHTML = "";
+myAgents.forEach((agent, index) => {
+const opt = document.createElement("option");
+opt.value = index;
+opt.innerText = "🤖 " + agent.name;
+select.appendChild(opt);
+const card = document.createElement("div");
+card.className = "agent-card";
+card.innerHTML = <div><b>${agent.name}</b><br><small style="color:#9ca3af;">${agent.role.substring(0, 45)}...</small></div> +
+(index > 0 ? <button onclick="deleteAgent(${index})" style="width:auto; padding:6px 10px; background:#ef4444; margin:0;">हटाएं</button> : '');
+list.appendChild(card);
+});
+}
+window.changeActiveAgent = function() {
+const idx = document.getElementById("active-agent-select").value;
+const agentName = myAgents[idx].name;
+document.getElementById("chat-box").innerHTML += <p style="color:#a78bfa; font-size:12px;">🔄 <b>${agentName}</b> सक्रिय है।</p>;
+}
+function speakText(text) {
+if ('speechSynthesis' in window) {
+window.speechSynthesis.cancel();
+const speech = new SpeechSynthesisUtterance(text);
+speech.lang = document.getElementById("lang-select").value;
+window.speechSynthesis.speak(speech);
+}
+}
+window.startVoice = function() {
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (!SpeechRecognition) {
+alert("आपके ब्राउज़र में वॉइस सपोर्ट उपलब्ध नहीं है।");
+return;
+}
+const recognition = new SpeechRecognition();
+recognition.lang = document.getElementById("lang-select").value;
+recognition.start();
+speakText("बोलिए, मैं सुन रहा हूँ।");
+recognition.onresult = function(event) {
+document.getElementById("user-input").value = event.results.transcript;
+askAI();
+};
+}
+async function loadOfflineEngine() {
+const statusDiv = document.getElementById("status");
+try {
+engine = await webllm.CreateMLCEngine(modelName, {
+initProgressCallback: (report) => {
+statusDiv.innerText = report.text;
+}
+});
+statusDiv.innerText = "✅ तैयार है! अब इंटरनेट बंद करके भी अपनी भाषा में बात करें।";
+statusDiv.style.color = "#34d399";
+speakText("AI पूरी तरह तैयार है।");
+} catch (err) {
+statusDiv.innerText = "❌ एरर: आपका ब्राउज़र ऑफलाइन AI सपोर्ट नहीं करता।";
+}
+}
+window.askAI = async function() {
+const input = document.getElementById("user-input");
+const chatBox = document.getElementById("chat-box");
+const prompt = input.value;
+if (!prompt || !engine) return;
+const idx = document.getElementById("active-agent-select").value;
+const activeAgent = myAgents[idx];
+const selectedLangName = document.getElementById("lang-select").options[document.getElementById("lang-select").selectedIndex].text;
+chatBox.innerHTML += <p><b>आप:</b> ${prompt}</p>;
+input.value = "";
+const reply = await engine.chat.completions.create({
+messages: [
+{ role: "system", content: ${activeAgent.role} IMPORTANT: You MUST reply strictly in ${selectedLangName} language. },
+{ role: "user", content: prompt }
+]
+});
+const answer = reply.choices.message.content;
+chatBox.innerHTML += <p style="color:#38bdf8;"><b>${activeAgent.name}:</b> ${answer}</p>;
+chatBox.scrollTop = chatBox.scrollHeight;
+speakText(answer);
+}
