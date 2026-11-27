@@ -5,7 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ALRA Spiritual Guide & Super-Expert AI</title>
     <link rel="manifest" href="/manifest.json">
-    <script>if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js'); }</script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(function (e) {
+                console.warn('Service worker register nahi hua:', e);
+            });
+        }
+    </script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #070b14; color: #f8fafc; padding: 12px; margin: 0; }
         .container { max-width: 550px; margin: auto; background: #111827; padding: 18px; border-radius: 16px; border: 1px solid #1f2937; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
@@ -14,14 +20,16 @@
         .priority-banner { background: linear-gradient(90deg, #4c1d95, #1e3a8a); padding: 10px; border-radius: 10px; margin-bottom: 12px; text-align: center; font-size: 13px; border: 1px solid #7c3aed; }
         select, input, textarea { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 10px; border: 1px solid #374151; background: #1f2937; color: white; font-size: 15px; box-sizing: border-box; outline: none; }
         button { width: 100%; padding: 13px; background: #10b981; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 15px; margin-bottom: 8px; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
         .tab-bar { display: flex; gap: 8px; margin-bottom: 12px; background: #1f2937; padding: 5px; border-radius: 12px; }
         .tab-btn { background: transparent; color: #9ca3af; margin: 0; padding: 10px; border-radius: 8px; }
         .tab-btn.active { background: #7c3aed; color: white; }
-        #chat-box { height: 34vh; overflow-y: auto; border: 1px solid #374151; padding: 12px; border-radius: 10px; margin-bottom: 10px; background: #030717; line-height: 1.6; }
+        #chat-box { height: 34vh; overflow-y: auto; border: 1px solid #374151; padding: 12px; border-radius: 10px; margin-bottom: 10px; background: #030717; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; }
+        #chat-box p { margin: 0 0 10px 0; }
         #mic-btn { background: #dc2626; font-size: 16px; }
         #status { font-size: 12px; color: #fbbf24; margin-bottom: 8px; text-align: center; }
         .hidden { display: none !important; }
-        .agent-card { background: #1f2937; padding: 12px; border-radius: 10px; margin-bottom: 8px; border-left: 4px solid #8b5cf6; display: flex; justify-content: space-between; align-items: center; }
+        .agent-card { background: #1f2937; padding: 12px; border-radius: 10px; margin-bottom: 8px; border-left: 4px solid #8b5cf6; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
         .ad-banner { background: #1f2937; border: 1px dashed #4b5563; padding: 8px; text-align: center; font-size: 11px; color: #9ca3af; border-radius: 8px; margin-top: 8px; }
         #vpn-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 15px; box-sizing: border-box; }
         .modal-content { background: #1f2937; padding: 24px; border-radius: 16px; max-width: 360px; text-align: center; border: 2px solid #8b5cf6; }
@@ -70,7 +78,7 @@
             <option value="ja-JP">日本語 (Japanese)</option>
         </optgroup>
     </select>
-    
+
     <div class="tab-bar">
         <button class="tab-btn active" id="tab-chat" onclick="switchTab('chat')">💬 एक्सपर्ट से पूछें</button>
         <button class="tab-btn" id="tab-agents" onclick="switchTab('agents')">🤖 मास्टर एजेंट बनाएं</button>
@@ -82,7 +90,7 @@
         <select id="active-agent-select" onchange="changeActiveAgent()"></select>
         <div id="chat-box"></div>
         <input type="text" id="user-input" placeholder="अपना सवाल या काम लिखें...">
-        <button id="send-btn" onclick="askAI()">संदेश भेजें (Send)</button>
+        <button id="send-btn" onclick="askAI()" disabled>संदेश भेजें (Send)</button>
         <button id="mic-btn" onclick="startVoice()">🎤 बोलकर पूछें (Voice Command)</button>
     </div>
 
@@ -100,21 +108,64 @@
     </div>
 </div>
 
-<script type="module">
-    import * as webllm from "https://esm.run";
+<script>
+    // NOTE: ye normal script hai (module nahi), taaki buttons ke onclick functions
+    // hamesha define rahein, chahe WebLLM ka import fail ho jaaye.
 
-    let engine;
+    let engine = null;
+    let isBusy = false;
+    let chatHistory = [];   // current agent ki chat history (context ke liye)
+
     const modelName = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
-    const masterIntelligenceCore = "You possess world-class, genius-level expertise equivalent to Claude, GPT-4, and Gemini combined. Think step-by-step, analyze deeply, provide structured, practical, high-value, and crystal-clear answers.";
+    const masterIntelligenceCore = "You possess world-class, genius-level expertise. Think step-by-step, analyze deeply, provide structured, practical, high-value, and crystal-clear answers.";
 
     const uiTranslations = {
-        "hi-IN": { tabChat: "💬 एक्सपर्ट से पूछें", tabAgents: "🤖 मास्टर एजेंट बनाएं", placeholder: "अपना सवाल या काम लिखें...", send: "संदेश भेजें", mic: "🎤 बोलकर पूछें (Voice)" },
+        "hi-IN": { tabChat: "💬 एक्सपर्ट से पूछें", tabAgents: "🤖 मास्टर एजेंट बनाएं", placeholder: "अपना सवाल या काम लिखें...", send: "संदेश भेजें (Send)", mic: "🎤 बोलकर पूछें (Voice)" },
         "ur-IN": { tabChat: "💬 ماہر سے پوچھیں", tabAgents: "🤖 نیا ایجنٹ بنائیں", placeholder: "اپنا سوال یا کام لکھیں...", send: "پیغام بھیجیں", mic: "🎤 بول کر پوچھیں" },
         "en-IN": { tabChat: "💬 Ask Expert", tabAgents: "🤖 Create Master Agent", placeholder: "Write your question or task...", send: "Send Message", mic: "🎤 Speak Now (Voice)" },
         "en-US": { tabChat: "💬 Ask Expert", tabAgents: "🤖 Create Master Agent", placeholder: "Write your question or task...", send: "Send Message", mic: "🎤 Speak Now (Voice)" }
     };
 
-    window.updateUILanguage = function() {
+    const defaultAgents = [
+        {
+            name: "🕊️ ALRA Spiritual Guide (मुख्य मार्गदर्शक)",
+            role: "You are the official ALRA Spiritual Guide, dedicated to spreading the universal message of Divine Love, spiritual awakening of the heart, peace, and humanity as taught by Sarkar Gohar Shahi and ALRA TV. Always speak with deep humility, love, respect for all religions, and profound spiritual wisdom."
+        },
+        {
+            name: "💻 सुपर कोडिंग और ऐप आर्किटेक्ट",
+            role: "You are a Principal Software Architect. Write clean, bug-free, production-ready code and explain complex technical concepts simply."
+        },
+        {
+            name: "📈 बिज़नेस और करोड़पति स्ट्रैटेजिस्ट",
+            role: "You are a world-renowned Business Strategist and Financial Advisor. Give step-by-step, high-profit business plans and money management advice."
+        }
+    ];
+
+    // FIX: corrupt localStorage data se app crash na ho
+    function loadAgents() {
+        try {
+            const saved = JSON.parse(localStorage.getItem("alra_super_agents"));
+            if (Array.isArray(saved) && saved.length > 0) return saved;
+        } catch (e) { /* ignore */ }
+        return defaultAgents.slice();
+    }
+    let myAgents = loadAgents();
+
+    // FIX: user/model text ko HTML mein daalne se pehle escape karna (XSS se bachav)
+    function esc(s) {
+        return String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    function saveAgents() {
+        localStorage.setItem("alra_super_agents", JSON.stringify(myAgents));
+    }
+
+    window.updateUILanguage = function () {
         const lang = document.getElementById("lang-select").value;
         const t = uiTranslations[lang] || uiTranslations["en-IN"];
         document.getElementById("tab-chat").innerText = t.tabChat;
@@ -122,143 +173,220 @@
         document.getElementById("user-input").placeholder = t.placeholder;
         document.getElementById("send-btn").innerText = t.send;
         document.getElementById("mic-btn").innerText = t.mic;
-    }
+    };
 
-    const defaultAgents = [
-        { 
-            name: "🕊️ ALRA Spiritual Guide (मुख्य मार्गदर्शक)", 
-            role: "You are the official ALRA Spiritual Guide, dedicated to spreading the universal message of Divine Love, spiritual awakening of the heart, peace, and humanity as taught by Sarkar Gohar Shahi and ALRA TV. Always speak with deep humility, love, respect for all religions, and profound spiritual wisdom." 
-        },
-        { 
-            name: "💻 सुपर कोडिंग और ऐप आर्किटेक्ट", 
-            role: "You are a Principal Software Architect. Write clean, bug-free, production-ready code and explain complex technical concepts simply." 
-        },
-        { 
-            name: "📈 बिज़नेस और करोड़पति स्ट्रैटेजिस्ट", 
-            role: "You are a world-renowned Business Strategist and Financial Advisor. Give step-by-step, high-profit business plans and money management advice." 
+    window.userEnableShield = async function () {
+        try {
+            await window.crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+        } catch (e) {
+            console.warn("Crypto available nahi:", e);
         }
-    ];
-
-    let myAgents = JSON.parse(localStorage.getItem("alra_super_agents")) || defaultAgents;
-
-    window.userEnableShield = async function() {
-        await window.crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
         document.getElementById("vpn-modal").classList.add("hidden");
         document.getElementById("main-app").classList.remove("hidden");
         renderAgents();
         speakText("ALRA स्पिरिचुअल गाइड में आपका स्वागत है। सुरक्षा शील्ड चालू हो गई है।");
         loadOfflineEngine();
+    };
+
+    window.switchTab = function (tab) {
+        document.getElementById("view-chat").classList.toggle("hidden", tab !== "chat");
+        document.getElementById("view-agents").classList.toggle("hidden", tab !== "agents");
+        document.getElementById("tab-chat").classList.toggle("active", tab === "chat");
+        document.getElementById("tab-agents").classList.toggle("active", tab === "agents");
+    };
+
+    window.createNewAgent = function () {
+        const name = document.getElementById("new-agent-name").value.trim();
+        const role = document.getElementById("new-agent-role").value.trim();
+        if (!name || !role) {
+            alert("कृपया फील्ड का नाम और काम दोनों लिखें!");
+            return;
+        }
+        // FIX 2: template string mein backticks nahi the
+        const superRole = `You are the world's #1 top-tier expert in ${name}. Your specific mission is: ${role}. ${masterIntelligenceCore}`;
+        myAgents.push({ name: "⚡ " + name, role: superRole });
+        saveAgents();
+        document.getElementById("new-agent-name").value = "";
+        document.getElementById("new-agent-role").value = "";
+        renderAgents();
+        speakText(name + " का मास्टर एजेंट तैयार हो गया है।");
+        switchTab("chat");
+    };
+
+    window.deleteAgent = function (index) {
+        if (index === 0) return;
+        myAgents.splice(index, 1);
+        saveAgents();
+        chatHistory = [];
+        renderAgents();
+    };
+
+    function renderAgents() {
+        const select = document.getElementById("active-agent-select");
+        const list = document.getElementById("agents-list");
+        const previous = select.value;
+        select.innerHTML = "";
+        list.innerHTML = "";
+
+        myAgents.forEach(function (agent, index) {
+            const opt = document.createElement("option");
+            opt.value = index;
+            opt.textContent = agent.name;
+            select.appendChild(opt);
+
+            const card = document.createElement("div");
+            card.className = "agent-card";
+            // FIX 3: yahan bhi backticks missing the; '+' se jodna bhi toot raha tha
+            const deleteBtn = index > 0
+                ? `<button onclick="deleteAgent(${index})" style="width:auto; padding:6px 10px; background:#ef4444; margin:0;">हटाएं</button>`
+                : "<span>मुख्य</span>";
+            card.innerHTML = `<div><b>${esc(agent.name)}</b><br><small style="color:#9ca3af;">Master-Level Expert Active</small></div>${deleteBtn}`;
+            list.appendChild(card);
+        });
+
+        // pehle wala selection bacha ke rakho (agar abhi bhi valid ho)
+        if (previous !== "" && Number(previous) < myAgents.length) {
+            select.value = previous;
+        }
     }
 
-    window.switchTab = function(tab) {
-        document.getElementById("view-chat").classList.toggle("hidden", tab !== 'chat');
-        document.getElementById("view-agents").classList.toggle("hidden", tab !== 'agents');
-        document.getElementById("tab-chat").classList.toggle("active", tab === 'chat');
-        document.getElementById("tab-agents").classList.toggle("active", tab === 'agents');
-}
-window.createNewAgent = function() {
-const name = document.getElementById("new-agent-name").value.trim();
-const role = document.getElementById("new-agent-role").value.trim();
-if (!name || !role) {
-alert("कृपया फील्ड का नाम और काम दोनों लिखें!");
-return;
-}
-const superRole = You are the world's #1 top-tier expert in ${name}. Your specific mission is: ${role}. ${masterIntelligenceCore};
-myAgents.push({ name: "⚡ " + name, role: superRole });
-localStorage.setItem("alra_super_agents", JSON.stringify(myAgents));
-document.getElementById("new-agent-name").value = "";
-document.getElementById("new-agent-role").value = "";
-renderAgents();
-speakText(name + " का मास्टर एजेंट तैयार हो गया है।");
-switchTab('chat');
-}
-window.deleteAgent = function(index) {
-if (index === 0) return;
-myAgents.splice(index, 1);
-localStorage.setItem("alra_super_agents", JSON.stringify(myAgents));
-renderAgents();
-}
-function renderAgents() {
-const select = document.getElementById("active-agent-select");
-const list = document.getElementById("agents-list");
-select.innerHTML = "";
-list.innerHTML = "";
-myAgents.forEach((agent, index) => {
-const opt = document.createElement("option");
-opt.value = index;
-opt.innerText = agent.name;
-select.appendChild(opt);
-const card = document.createElement("div");
-card.className = "agent-card";
-card.innerHTML = <div><b>${agent.name}</b><br><small style="color:#9ca3af;">Master-Level Expert Active</small></div> +
-(index > 0 ? <button onclick="deleteAgent(${index})" style="width:auto; padding:6px 10px; background:#ef4444; margin:0;">हटाएं</button> : 'मुख्य');
-list.appendChild(card);
-});
-}
-window.changeActiveAgent = function() {
-const idx = document.getElementById("active-agent-select").value;
-const agentName = myAgents[idx].name;
-document.getElementById("chat-box").innerHTML += <p style="color:#a78bfa; font-size:12px;">🔄 <b>${agentName}</b> अब आपकी सेवा में तैयार है।</p>;
-}
-function speakText(text) {
-if ('speechSynthesis' in window) {
-window.speechSynthesis.cancel();
-const speech = new SpeechSynthesisUtterance(text);
-speech.lang = document.getElementById("lang-select").value;
-window.speechSynthesis.speak(speech);
-}
-}
-window.startVoice = function() {
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-if (!SpeechRecognition) {
-alert("आपके ब्राउज़र में वॉइस सपोर्ट उपलब्ध नहीं है।");
-return;
-}
-const recognition = new SpeechRecognition();
-recognition.lang = document.getElementById("lang-select").value;
-recognition.start();
-speakText("बोलिए, मैं सुन रहा हूँ।");
-recognition.onresult = function(event) {
-document.getElementById("user-input").value = event.results[0][0].transcript;
-askAI();
-};
-}
-async function loadOfflineEngine() {
-const statusDiv = document.getElementById("status");
-const chatBox = document.getElementById("chat-box");
-try {
-engine = await webllm.CreateMLCEngine(modelName, {
-initProgressCallback: (report) => {
-statusDiv.innerText = report.text;
-}
-});
-statusDiv.innerText = "✅ तैयार है! अब इंटरनेट बंद करके भी बात करें।";
-statusDiv.style.color = "#34d399";
-chatBox.innerHTML += <p style="color:#c4b5fd;"><b>🕊️ ALRA Spiritual Guide:</b> ईश्वरीय प्रेम और शांति के इस मंच पर आपका स्वागत है। आप जीवन, आध्यात्म या मानवता से जुड़ा कोई भी प्रश्न पूछ सकते हैं।</p>;
-speakText("ALRA स्पिरिचुअल गाइड तैयार है।");
-} catch (err) {
-statusDiv.innerText = "❌ एरर: आपका ब्राउज़र ऑफलाइन AI सपोर्ट नहीं करता।";
-}
-}
-window.askAI = async function() {
-const input = document.getElementById("user-input");
-const chatBox = document.getElementById("chat-box");
-const prompt = input.value;
-if (!prompt || !engine) return;
-const idx = document.getElementById("active-agent-select").value;
-const activeAgent = myAgents[idx];
-const selectedLangName = document.getElementById("lang-select").options[document.getElementById("lang-select").selectedIndex].text;
-chatBox.innerHTML += <p><b>आप:</b> ${prompt}</p>;
-input.value = "";
-const reply = await engine.chat.completions.create({
-messages: [
-{ role: "system", content: ${activeAgent.role} ${masterIntelligenceCore} IMPORTANT: Reply strictly in ${selectedLangName} language using clear formatting. },
-{ role: "user", content: prompt }
-]
-});
-const answer = reply.choices[0].message.content;
-chatBox.innerHTML += <p style="color:#38bdf8;"><b>${activeAgent.name}:</b> ${answer}</p>;
-chatBox.scrollTop = chatBox.scrollHeight;
-speakText(answer);
-}
+    window.changeActiveAgent = function () {
+        const idx = document.getElementById("active-agent-select").value;
+        const agentName = myAgents[idx].name;
+        chatHistory = [];   // agent badla to purani baat-cheet ka context hata do
+        const chatBox = document.getElementById("chat-box");
+        chatBox.innerHTML += `<p style="color:#a78bfa; font-size:12px;">🔄 <b>${esc(agentName)}</b> अब आपकी सेवा में तैयार है।</p>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+    };
 
+    function speakText(text) {
+        if ("speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+            const speech = new SpeechSynthesisUtterance(text);
+            speech.lang = document.getElementById("lang-select").value;
+            window.speechSynthesis.speak(speech);
+        }
+    }
+
+    window.startVoice = function () {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert("आपके ब्राउज़र में वॉइस सपोर्ट उपलब्ध नहीं है।");
+            return;
+        }
+        const recognition = new SpeechRecognition();
+        recognition.lang = document.getElementById("lang-select").value;
+        recognition.onresult = function (event) {
+            document.getElementById("user-input").value = event.results[0][0].transcript;
+            askAI();
+        };
+        recognition.onerror = function (e) {
+            document.getElementById("status").innerText = "🎤 वॉइस एरर: " + e.error;
+        };
+        recognition.start();
+        // FIX: speakText mic ko khud sunai na de, isliye recognition.start() ke baad bolna band rakha
+    };
+
+    async function loadOfflineEngine() {
+        const statusDiv = document.getElementById("status");
+        const chatBox = document.getElementById("chat-box");
+
+        // FIX: WebGPU check (bina iske WebLLM load nahi hota)
+        if (!navigator.gpu) {
+            statusDiv.innerText = "❌ आपके ब्राउज़र/फोन में WebGPU सपोर्ट नहीं है। Chrome (latest) इस्तेमाल करें।";
+            return;
+        }
+
+        try {
+            const webllm = await import("https://esm.run/@mlc-ai/web-llm");
+            engine = await webllm.CreateMLCEngine(modelName, {
+                initProgressCallback: function (report) {
+                    statusDiv.innerText = report.text;
+                }
+            });
+            statusDiv.innerText = "✅ तैयार है! अब इंटरनेट बंद करके भी बात करें।";
+            statusDiv.style.color = "#34d399";
+            document.getElementById("send-btn").disabled = false;
+            chatBox.innerHTML += `<p style="color:#c4b5fd;"><b>🕊️ ALRA Spiritual Guide:</b> ईश्वरीय प्रेम और शांति के इस मंच पर आपका स्वागत है। आप जीवन, आध्यात्म या मानवता से जुड़ा कोई भी प्रश्न पूछ सकते हैं।</p>`;
+            speakText("ALRA स्पिरिचुअल गाइड तैयार है।");
+        } catch (err) {
+            console.error(err);
+            statusDiv.innerText = "❌ एरर: मॉडल लोड नहीं हो पाया। (" + (err && err.message ? err.message : err) + ")";
+        }
+    }
+
+    window.askAI = async function () {
+        const input = document.getElementById("user-input");
+        const chatBox = document.getElementById("chat-box");
+        const sendBtn = document.getElementById("send-btn");
+        const prompt = input.value.trim();
+
+        if (!prompt) return;
+        if (!engine) {
+            alert("इंजन अभी लोड हो रहा है, कृपया थोड़ा इंतज़ार करें।");
+            return;
+        }
+        if (isBusy) return;
+
+        const idx = document.getElementById("active-agent-select").value;
+        const activeAgent = myAgents[idx];
+        const langSelect = document.getElementById("lang-select");
+        const selectedLangName = langSelect.options[langSelect.selectedIndex].text;
+
+        // FIX 4: yahan bhi backticks missing the
+        chatBox.innerHTML += `<p><b>आप:</b> ${esc(prompt)}</p>`;
+        input.value = "";
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        isBusy = true;
+        sendBtn.disabled = true;
+        const thinkingId = "thinking-" + Date.now();
+        chatBox.innerHTML += `<p id="${thinkingId}" style="color:#9ca3af;">⏳ सोच रहा हूँ...</p>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        try {
+            chatHistory.push({ role: "user", content: prompt });
+            // chhota model hai, isliye sirf aakhri 10 messages context mein bhejo
+            const recent = chatHistory.slice(-10);
+
+            const reply = await engine.chat.completions.create({
+                messages: [
+                    {
+                        role: "system",
+                        // FIX 5: system prompt bhi template string hona chahiye tha
+                        content: `${activeAgent.role} ${masterIntelligenceCore} IMPORTANT: Reply strictly in ${selectedLangName} language using clear formatting.`
+                    },
+                    ...recent
+                ]
+            });
+
+            const answer = reply.choices[0].message.content;
+            chatHistory.push({ role: "assistant", content: answer });
+
+            const thinking = document.getElementById(thinkingId);
+            if (thinking) thinking.remove();
+            chatBox.innerHTML += `<p style="color:#38bdf8;"><b>${esc(activeAgent.name)}:</b> ${esc(answer)}</p>`;
+            chatBox.scrollTop = chatBox.scrollHeight;
+            speakText(answer);
+        } catch (err) {
+            console.error(err);
+            chatHistory.pop();
+            const thinking = document.getElementById(thinkingId);
+            if (thinking) thinking.remove();
+            chatBox.innerHTML += `<p style="color:#f87171;">❌ जवाब देने में एरर आया। दोबारा कोशिश करें।</p>`;
+        } finally {
+            isBusy = false;
+            sendBtn.disabled = false;
+        }
+    };
+
+    // Enter dabane par bhi message jaaye
+    document.getElementById("user-input").addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            askAI();
+        }
+    });
+</script>
+</body>
+</html>
